@@ -10,8 +10,19 @@ HEADER_FORMAT = "!BIII"
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 
 
-def create_packet(packet_type, sequence_number, data, checksum=0):
+def calculate_checksum(data):
+    checksum = 0
+
+    for byte in data:
+        checksum = (checksum + byte) % (2**32)
+
+    return checksum
+
+
+def create_packet(packet_type, sequence_number, data):
     data_length = len(data)
+
+    checksum = calculate_checksum(data)
 
     header = struct.pack(
         HEADER_FORMAT,
@@ -40,3 +51,7 @@ def parse_packet(packet):
         checksum,
         data
     )
+
+
+def verify_checksum(data, checksum):
+    return calculate_checksum(data) == checksum

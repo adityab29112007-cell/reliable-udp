@@ -1,22 +1,70 @@
 import socket
+import os
 
 from config import HOST, PORT, CHUNK_SIZE
-from packet import create_packet
+from packet import create_packet, parse_packet
 
-
-# Packet type
 DATA = 1
+ACK = 2
+FIN = 3
+FIN_ACK = 4
+
+TIMEOUT = 2
 
 
-def read_file_chunks(filename):
-    """
-    Read a file in chunks of CHUNK_SIZE bytes.
-    Each chunk gets a sequence number.
-    """
+def send_packet_and_wait_ack(sock, packet, sequence_number):
+
+    while True:
+
+        sock.sendto(packet, (HOST, PORT))
+
+        print(
+            f"Sent packet | Sequence: {sequence_number}"
+        )
+
+        sock.settimeout(TIMEOUT)
+
+        try:
+
+            ack_packet, address = sock.recvfrom(2048)
+
+            packet_type, ack_sequence, _, _, _ = parse_packet(
+                ack_packet
+            )
+
+            if (
+                packet_type == ACK
+                and ack_sequence == sequence_number
+            ):
+
+                print(
+                    f"ACK received | Sequence: {ack_sequence}"
+                )
+
+                return
+
+        except socket.timeout:
+
+            print(
+                f"Timeout! Retransmitting | "
+                f"Sequence: {sequence_number}"
+            )
+
+
+def send_file(filename):
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+    print("=" * 45)
+    print("          RELIABLE UDP FILE SENDER")
+    print("=" * 45)
+
+    print(f"File: {filename}")
+    print()
+
+    sequence_number = 0
 
     with open(filename, "rb") as file:
-
-        sequence_number = 0
 
         while True:
 
@@ -25,93 +73,61 @@ def read_file_chunks(filename):
             if not data:
                 break
 
-            yield sequence_number, data
+            packet = create_packet(
+                packet_type=DATA,
+                sequence_number=sequence_number,
+                data=data
+            )
+
+            send_packet_and_wait_ack(
+                sock,
+                packet,
+                sequence_number
+            )
 
             sequence_number += 1
 
+    # Send FIN packet
+    fin_packet = create_packet(
+        packet_type=FIN,
+        sequence_number=sequence_number,
+        data=b""
+    )
 
-def send_file(sock, filename):
-    """
-    Read a file, create UDP packets,
-    and send each packet to the receiver.
-    """
+    sock.sendto(fin_packet, (HOST, PORT))
 
-    print(f"\nSending file: {filename}")
+    print("\nFIN sent.")
 
-    for sequence_number, data in read_file_chunks(filename):
+    sock.settimeout(TIMEOUT)
 
-        packet = create_packet(
-            packet_type=DATA,
-            sequence_number=sequence_number,
-            data=data
+    try:
+
+        fin_ack_packet, address = sock.recvfrom(2048)
+
+        packet_type, _, _, _, _ = parse_packet(
+            fin_ack_packet
         )
 
-        sock.sendto(packet, (HOST, PORT))
+        if packet_type == FIN_ACK:
 
-        print(
-            f"Sent file chunk | "
-            f"Sequence: {sequence_number} | "
-            f"Size: {len(data)} bytes"
-        )
+            print("FIN_ACK received.")
+            print("File transfer completed successfully.")
 
-    print("File sent successfully!")
+    except socket.timeout:
 
-
-def start_sender():
-
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-    sequence_number = 0
-
-    print("=" * 40)
-    print("       RELIABLE UDP SENDER")
-    print("=" * 40)
-    print(f"Sending to {HOST}:{PORT}")
-    print()
-
-    while True:
-
-        message = input("Enter message: ")
-
-        if message.lower() == "exit":
-            break
-
-        # File transfer command
-        if message.startswith("file "):
-
-            filename = message[5:].strip()
-
-            try:
-                send_file(sock, filename)
-
-            except FileNotFoundError:
-                print(f"File not found: {filename}")
-
-            continue
-
-        # Normal message
-        data = message.encode()
-
-        packet = create_packet(
-            packet_type=DATA,
-            sequence_number=sequence_number,
-            data=data
-        )
-
-        sock.sendto(packet, (HOST, PORT))
-
-        print(
-            f"Sent packet | "
-            f"Sequence: {sequence_number} | "
-            f"Data: {message}"
-        )
-
-        sequence_number += 1
+        print("FIN_ACK not received.")
 
     sock.close()
 
-    print("\nSender stopped.")
-
 
 if __name__ == "__main__":
-    start_sender()
+
+    filename = input("Enter file name: ")
+
+    if not os.path.exists(filename):
+
+        print("File not found.")
+
+    else:
+
+        send_file(filename)
