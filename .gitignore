@@ -1,3 +1,7 @@
+venv/
 __pycache__/
 *.pyc
+received/
+logs/
+.DS_Store
 test.txt
