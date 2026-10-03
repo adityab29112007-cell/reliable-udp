@@ -1,7 +1,7 @@
 import socket
 import os
 
-from config import HOST, PORT, CHUNK_SIZE
+from config import HOST, CHUNK_SIZE
 from packet import create_packet, parse_packet
 
 DATA = 1
@@ -10,13 +10,18 @@ FIN = 3
 FIN_ACK = 4
 
 TIMEOUT = 2
+NETWORK_PORT = 5001
 
 
 def send_packet_and_wait_ack(sock, packet, sequence_number):
 
     while True:
 
-        sock.sendto(packet, (HOST, PORT))
+        # Send packet to network simulator
+        sock.sendto(
+            packet,
+            (HOST, NETWORK_PORT)
+        )
 
         print(
             f"Sent packet | Sequence: {sequence_number}"
@@ -53,7 +58,10 @@ def send_packet_and_wait_ack(sock, packet, sequence_number):
 
 def send_file(filename):
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock = socket.socket(
+        socket.AF_INET,
+        socket.SOCK_DGRAM
+    )
 
     print("=" * 45)
     print("          RELIABLE UDP FILE SENDER")
@@ -87,14 +95,20 @@ def send_file(filename):
 
             sequence_number += 1
 
+    # -------------------------
     # Send FIN packet
+    # -------------------------
+
     fin_packet = create_packet(
         packet_type=FIN,
         sequence_number=sequence_number,
         data=b""
     )
 
-    sock.sendto(fin_packet, (HOST, PORT))
+    sock.sendto(
+        fin_packet,
+        (HOST, NETWORK_PORT)
+    )
 
     print("\nFIN sent.")
 
